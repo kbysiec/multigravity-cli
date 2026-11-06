@@ -1,175 +1,178 @@
-![Multigravity](assets/multigravity-logo.jpg)
+<div align="center">
+  <img src="assets/multigravity-logo.jpg" alt="Multigravity Logo" width="120" />
 
-# Multigravity
+  # Multigravity
 
-**Run multiple Antigravity IDE profiles simultaneously — each with its own accounts, extensions, and settings.**
+  **Multi-profile launcher for Google Antigravity on macOS**
 
-No more logging in and out. Launch as many profiles as you need, all at once.
-
-[![GitHub repository](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/sujitagarwal/multigravity-cli)
-[![GitHub profile](https://img.shields.io/badge/GitHub-Profile-lightgrey?logo=github)](https://github.com/sujitagarwal)
-[![GitHub stars](https://img.shields.io/github/stars/sujitagarwal/multigravity-cli?style=social)](https://github.com/sujitagarwal/multigravity-cli/stargazers)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#install)
+  Run multiple isolated instances of Antigravity and Antigravity IDE simultaneously — each with its own Google account, while sharing extensions, settings, and MCP tools.
+</div>
 
 ---
 
-## Install
-
-**macOS / Linux**
-
-```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/sujitagarwal/multigravity-cli/main/install.sh)"
-```
-
-**Windows** — open PowerShell and run:
-
-```powershell
-irm https://raw.githubusercontent.com/sujitagarwal/multigravity-cli/main/install.ps1 | iex
-```
+> [!IMPORTANT]
+> **macOS Only:** Support for Windows and Linux has been removed in this version. Modern Google Antigravity on macOS uses a dual-app architecture (`Antigravity.app` desktop chat + `Antigravity IDE.app` code editor) combined with native macOS Keychain credential storage. Multigravity was rewritten specifically for macOS (Apple Silicon & Intel) to guarantee complete account isolation, credential separation, and seamless integration with macOS.
 
 ---
 
-## Quick Start
+## ⚡ Why Multigravity?
+
+Google Antigravity consists of two distinct applications:
+1. **Antigravity.app** — the AI agent and chat desktop application
+2. **Antigravity IDE.app** — the code editor (VS Code fork)
+
+By default, Antigravity stores its authentication tokens globally in the macOS Keychain (`login.keychain-db`) and configuration under `~/.gemini/` and `~/Library/Application Support/`. This prevents you from running multiple Google accounts at the same time (e.g. personal, client, or corporate work accounts).
+
+**Multigravity solves this completely:**
+- 🔒 **Full Account Isolation** — Each profile uses an isolated, dedicated macOS Keychain (`login.keychain-db`) and private `.gemini` runtime directory. Your primary account remains untouched, and each profile remembers its own Google login.
+- 💻 **IDE-First by Default** — Running `multigravity <profile>` immediately opens Antigravity IDE. Launch only Chat with `--chat`, or open both simultaneously with `--both`.
+- 🧩 **Shared by Default** — Profiles share your installed IDE extensions, settings, keybindings, skills, plugins, and MCP configurations by default, isolating only login sessions and workspace history. Fully isolated clean-slate profiles are also supported (`--isolated`).
+- 🖥️ **Native macOS Shortcuts** — Automatically generates `.app` bundles in `~/Applications/` with icons, fully discoverable in Spotlight, Raycast, and Alfred, and pinnable to the macOS Dock.
+- ⚡ **Zero Conflict** — Launches both apps using isolated user data directories (`--user-data-dir`) and native binary wrappers, preventing Electron instance lock conflicts.
+
+---
+
+## 📦 Installation
+
+Requirements: **macOS** (macOS 12+ on Apple Silicon or Intel) with Google Antigravity installed.
 
 ```bash
-# Create profiles
+# Clone the repository
+git clone https://github.com/kbysiec/multigravity-cli.git
+cd multigravity-cli
+
+# Run installer
+./install.sh
+```
+
+The installer copies the binary to `~/.local/bin/multigravity` (or `/usr/local/bin` if writable) and sets up your `PATH`.
+
+---
+
+## 🚀 Quick Start
+
+```bash
+# 1. Verify your installation and environment
+multigravity doctor
+
+# 2. Create a new shared profile (e.g. work)
 multigravity new work
-multigravity new personal
 
-# Launch a profile
+# 3. Launch Antigravity IDE with this profile
 multigravity work
 
-# Pass arguments straight through to Antigravity
-multigravity work .
-multigravity work path/to/project
-multigravity work --new-window
+# Or launch both IDE and Desktop Chat simultaneously:
+multigravity work --both
+
+# You can also open it via Spotlight (Cmd + Space):
+# "Multigravity work.app"
 ```
 
-Each profile gets an automatic clickable launcher:
-
-| Platform | Location |
-|----------|----------|
-| macOS    | `~/Applications/Multigravity <name>.app` |
-| Windows  | Start Menu → Programs |
-| Linux    | `~/.local/share/applications/multigravity-<name>.desktop` |
+When you first open a new profile, you will see a fresh onboarding screen where you can sign in with your secondary Google account. Your main account in the default Antigravity installation will stay completely unaffected.
 
 ---
 
-## Commands
+## 🎮 Launch Modes
 
-### Profile Management
+| Command | Action |
+|---|---|
+| `multigravity <name>` | Launches **Antigravity IDE** (default mode) |
+| `multigravity <name> --ide` | Launches only Antigravity IDE |
+| `multigravity <name> --chat` (or `--app`) | Launches only Antigravity Desktop (Chat) |
+| `multigravity <name> --both` (or `--all`) | Launches **both** Antigravity IDE and Desktop Chat |
 
-| Command | Description |
-|---------|-------------|
-| `multigravity new <name>` | Create a new full profile |
-| `multigravity new <name> --shared` | Create a lightweight profile (shared extensions & settings, isolated accounts) |
-| `multigravity new <name> --from <template>` | Create a profile from a saved template |
-| `multigravity <name>` | Launch a profile |
-| `multigravity list` | List all profiles |
-| `multigravity status` | Show running state, type, last used, and size per profile |
-| `multigravity clone <src> <dest>` | Copy an existing profile |
-| `multigravity rename <old> <new>` | Rename a profile |
-| `multigravity delete <name>` | Delete a profile and all its data |
+You can also customize your default launch preference globally by setting `MULTIGRAVITY_DEFAULT_LAUNCH` in your `~/.zshrc`:
+```bash
+export MULTIGRAVITY_DEFAULT_LAUNCH="both"   # Options: "ide" (default), "both", or "chat"
+```
 
-### Templates
+---
 
-| Command | Description |
-|---------|-------------|
-| `multigravity template save <profile> <name>` | Save a profile as a reusable template |
-| `multigravity template list` | List saved templates |
-| `multigravity template delete <name>` | Remove a template |
-
-### Backup & Transfer
+## 🛠️ Command Reference
 
 | Command | Description |
-|---------|-------------|
-| `multigravity export <name> [path]` | Archive a profile to `.tar.gz` (`.zip` on Windows) |
-| `multigravity import <archive> [name]` | Restore a profile from an archive |
-
-### Utilities
-
-| Command | Description |
-|---------|-------------|
-| `multigravity stats` | Show disk usage per profile |
-| `multigravity doctor` | Diagnose your environment |
+|---|---|
+| `multigravity new <name...> [options]` | Create one or more profiles and `.app` shortcuts (shared by default) |
+| `multigravity new <name> --isolated` | Create a clean-slate, fully isolated profile (empty extensions & settings) |
+| `multigravity new <name> --from <template>` | Create a profile based on a saved template |
+| `multigravity <name> [flags]` | Launch the profile (IDE by default, `--chat`, `--both`, `--ide`) |
+| `multigravity list` | List all existing profiles |
+| `multigravity status` | Show running processes (App & IDE), storage size, and last modified date |
+| `multigravity rename <old> <new>` | Rename a profile and update its macOS shortcut |
+| `multigravity clone <src> <dest>` | Duplicate an existing profile and its configuration |
+| `multigravity delete <name>` | Delete a profile and remove its desktop shortcut |
+| `multigravity template save <profile> <name>` | Save an existing profile as a reusable template |
+| `multigravity template list` | List all saved templates |
+| `multigravity template delete <name>` | Delete a template |
+| `multigravity export <name> [path]` | Export a profile to a compressed `.tar.gz` archive |
+| `multigravity import <archive> [name]` | Import and restore a profile from a `.tar.gz` archive |
+| `multigravity stats` | Show disk space usage breakdown across all profiles |
+| `multigravity doctor` | Diagnose environment, binary paths, and keychain status |
+| `multigravity completion` | Setup instructions for Zsh / Bash shell auto-completion |
 | `multigravity update` | Update Multigravity to the latest version |
-| `multigravity completion` | Set up shell tab-completion |
-| `multigravity help` | Show help |
 
 ---
 
-## Shared Profiles
+## ⚙️ Environment Variables
 
-Full profiles are fully isolated — separate extensions, settings, and accounts. That's the default.
+| Variable | Default | Description |
+|---|---|---|
+| `MULTIGRAVITY_DEFAULT_LAUNCH` | `ide` | Default launch mode: `ide` (default), `both`, or `chat` |
+| `MULTIGRAVITY_HOME` | `~/AntigravityProfiles` | Base directory where all profile data is stored |
+| `MULTIGRAVITY_AGY` | `/Applications/Antigravity.app` | Override path to Antigravity (desktop) app |
+| `MULTIGRAVITY_IDE` | `/Applications/Antigravity IDE.app` | Override path to Antigravity IDE app |
 
-**Shared profiles** go lighter: they symlink extensions and settings from your main Antigravity install, isolating only the account/auth layer. Useful when you need a second account but don't want to duplicate gigabytes of extensions.
+---
+
+## 📂 Profile Architecture
+
+Each profile created in `~/AntigravityProfiles/<name>/` simulates an isolated user environment:
+
+```
+~/AntigravityProfiles/<name>/
+├── .gemini/
+│   ├── bin/                    → Symlink to ~/.gemini/bin (agy binary)
+│   ├── config/
+│   │   ├── mcp_config.json     → Symlink to shared MCP configuration
+│   │   ├── plugins/            → Symlink to shared plugins
+│   │   ├── skills/             → Symlink to shared skills
+│   │   └── sidecars/           → Symlink to shared sidecars
+│   ├── GEMINI.md               → Symlink to global instructions
+│   └── trustedFolders.json     → Symlink to trusted folders list
+├── .antigravity-ide/
+│   └── extensions/             → Symlink to system extensions (shared by default)
+├── bin/
+│   └── security                # Transparent security shim isolating keychain calls
+├── Library/
+│   ├── Keychains/
+│   │   ├── login.keychain-db   # Private, isolated macOS Keychain for this profile
+│   │   └── login.keychain      → Symlink to login.keychain-db
+│   └── Application Support/
+│       ├── Antigravity/        # Desktop app session data, state, and browser storage
+│       └── Antigravity IDE/    # IDE workspace state, history, and User settings
+└── .zshenv                     # Profile shell environment (HOME, ZDOTDIR, PATH)
+```
+
+### How Credential Isolation Works
+1. When Antigravity backend (`agy`) queries credentials, it invokes the `/usr/bin/security` tool for `service="gemini"` and `account="antigravity"`.
+2. Multigravity places a transparent `security` shim in the profile's `PATH`.
+3. The shim redirects credential lookups and saves to the profile's dedicated `login.keychain-db` without touching your system's global keychain.
+4. `antigravity.serverArgs` is automatically configured with `--gemini_dir` in the profile's IDE settings, ensuring complete runtime separation.
+
+---
+
+## 🗑️ Uninstallation
+
+To uninstall Multigravity:
 
 ```bash
-multigravity new client-x --shared
+./uninstall.sh
 ```
+
+The uninstaller removes the binary and optionally prompts whether you want to delete your profile data in `~/AntigravityProfiles` and macOS shortcuts.
 
 ---
 
-## Templates
+## 📄 License
 
-Save a configured profile as a template, then spin up new profiles from it instantly:
-
-```bash
-# Save your ideal setup as a template
-multigravity template save work base
-
-# Create new profiles from it
-multigravity new project-a --from base
-multigravity new project-b --from base
-
-# See what templates you have
-multigravity template list
-```
-
----
-
-## Shell Completion
-
-Enable tab-completion for commands and profile names:
-
-```bash
-multigravity completion
-```
-
-Follow the instructions to add it to your `.zshrc`, `.bashrc`, or PowerShell `$PROFILE`.
-
----
-
-## Uninstall
-
-**macOS / Linux**
-
-```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/sujitagarwal/multigravity-cli/main/uninstall.sh)"
-```
-
-**Windows**
-
-```powershell
-irm https://raw.githubusercontent.com/sujitagarwal/multigravity-cli/main/uninstall.ps1 | iex
-```
-
-You'll be asked whether to remove your profile data — nothing is deleted without confirmation.
-
----
-
-## Profile Name Rules
-
-Letters, numbers, and hyphens only. Must start with a letter or number.
-
-```
-✅  work   client-a   test1
-❌  -name  my_profile
-```
-
----
-
-## Credits
-
-- **Windows support** — [Samin Yeasar](https://github.com/Solez-ai)
-- **Linux support** — [Md Rayyan Nawaz](https://github.com/therayyanawaz)
+MIT © [Kamil Bysiec](https://github.com/kbysiec)

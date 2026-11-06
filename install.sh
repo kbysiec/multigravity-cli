@@ -1,37 +1,28 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
-REPO="sujitagarwal/multigravity-cli"
+REPO="kbysiec/multigravity-cli"
 BRANCH="main"
 RAW="https://raw.githubusercontent.com/$REPO/$BRANCH"
 INSTALL_DIR="/usr/local/bin"
 
 # ── helpers ──────────────────────────────────────────────────────────────────
-print_step () { echo "  → $1"; }
-abort ()       { echo "Error: $1" >&2; exit 1; }
+print_step() { echo "  → $1"; }
+abort()      { echo "Error: $1" >&2; exit 1; }
 
-# ── platform ─────────────────────────────────────────────────────────────────
-case "$(uname -s)" in
-  Darwin)
-    PLATFORM="darwin"
-    ;;
-  Linux)
-    PLATFORM="linux"
-    ;;
-  *)
-    abort "unsupported platform. Multigravity currently supports macOS and Linux."
-    ;;
-esac
+# ── platform check ───────────────────────────────────────────────────────────
+if [ "$(uname -s)" != "Darwin" ]; then
+  abort "This version of Multigravity is built exclusively for macOS."
+fi
 
 # ── preflight ────────────────────────────────────────────────────────────────
-command -v curl &>/dev/null || abort "curl is required but not found"
+command -v curl &>/dev/null || abort "curl is required but was not found"
 
-# fall back to ~/.local/bin if /usr/local/bin isn't writable without sudo
+# Fallback to ~/.local/bin if /usr/local/bin is not writable without sudo
 if [ ! -w "$INSTALL_DIR" ]; then
   INSTALL_DIR="$HOME/.local/bin"
   mkdir -p "$INSTALL_DIR"
 
-  # auto-add to PATH in the user's shell profile if not already there
   if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
     case "${SHELL:-}" in
       */zsh)  SHELL_RC="$HOME/.zshrc" ;;
@@ -52,20 +43,29 @@ if [ ! -w "$INSTALL_DIR" ]; then
       print_step "Added $INSTALL_DIR to PATH in $SHELL_RC"
     fi
 
-    # apply to current session so the next commands in this script work
     export PATH="$INSTALL_DIR:$PATH"
   fi
 fi
 
-echo "Installing Multigravity to $INSTALL_DIR ..."
+echo "Installing Multigravity in $INSTALL_DIR ..."
 
-# ── download multigravity script ─────────────────────────────────────────────
-print_step "Downloading multigravity..."
-curl -fsSL "$RAW/multigravity" -o "$INSTALL_DIR/multigravity"
-chmod +x "$INSTALL_DIR/multigravity"
+# ── copy local or download from remote repo ──────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd || true)"
 
-# ── download macOS icon ──────────────────────────────────────────────────────
-if [ "$PLATFORM" = "darwin" ]; then
+if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/multigravity" ]; then
+  print_step "Copying local multigravity script..."
+  cp "$SCRIPT_DIR/multigravity" "$INSTALL_DIR/multigravity"
+  chmod +x "$INSTALL_DIR/multigravity"
+
+  if [ -f "$SCRIPT_DIR/icon.icns" ]; then
+    print_step "Copying application icon..."
+    cp "$SCRIPT_DIR/icon.icns" "$INSTALL_DIR/icon.icns"
+  fi
+else
+  print_step "Downloading multigravity..."
+  curl -fsSL "$RAW/multigravity" -o "$INSTALL_DIR/multigravity"
+  chmod +x "$INSTALL_DIR/multigravity"
+
   print_step "Downloading icon..."
   curl -fsSL "$RAW/icon.icns" -o "$INSTALL_DIR/icon.icns"
 fi
@@ -74,17 +74,12 @@ echo ""
 echo "✓ Multigravity installed successfully!"
 echo ""
 echo "Reload your shell to apply PATH changes:"
-echo "  source ~/.zshrc   (or ~/.bashrc, or open a new terminal)"
+echo "  source ~/.zshrc   (or open a new terminal window)"
 echo ""
 echo "Usage:"
-echo "  multigravity help"
-echo "  multigravity new <profile-name>"
-echo "  multigravity <profile-name>"
-
-if [ "$PLATFORM" = "linux" ] && ! command -v antigravity &>/dev/null && [ ! -x /usr/share/antigravity/antigravity ]; then
-  echo ""
-  echo "Note:"
-  echo "  Antigravity was not found on this machine."
-  echo "  Install Antigravity for Linux and ensure 'antigravity' is on PATH,"
-  echo "  or launch Multigravity with MULTIGRAVITY_APP=/path/to/antigravity."
-fi
+echo "  multigravity doctor                  # Diagnose environment"
+echo "  multigravity new <profile-name>      # Create a new profile"
+echo "  multigravity <profile-name>          # Launch Antigravity IDE (default)"
+echo "  multigravity <profile-name> --chat   # Launch only Antigravity Desktop (Chat)"
+echo "  multigravity <profile-name> --both   # Launch both IDE and Desktop simultaneously"
+echo "  multigravity <profile-name> --ide    # Launch only Antigravity IDE"
