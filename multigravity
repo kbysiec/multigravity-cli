@@ -3,8 +3,32 @@ set -euo pipefail
 
 shopt -s nullglob
 
-BASE="${MULTIGRAVITY_HOME:-$HOME/AntigravityProfiles}"
-REAL_HOME="$HOME"
+get_real_home() {
+  local user_name
+  user_name="$(id -un 2>/dev/null || echo "${USER:-}")"
+  if [ -n "$user_name" ]; then
+    local expanded
+    expanded="$(eval echo "~$user_name" 2>/dev/null || true)"
+    if [ -n "$expanded" ] && [ "$expanded" != "~$user_name" ] && [ -d "$expanded" ]; then
+      printf '%s\n' "$expanded"
+      return 0
+    fi
+  fi
+
+  if command -v python3 >/dev/null 2>&1; then
+    local py_home
+    py_home="$(python3 -c 'import pwd, os; print(pwd.getpwuid(os.getuid()).pw_dir)' 2>/dev/null || true)"
+    if [ -n "$py_home" ] && [ -d "$py_home" ]; then
+      printf '%s\n' "$py_home"
+      return 0
+    fi
+  fi
+
+  printf '%s\n' "$HOME"
+}
+
+REAL_HOME="$(get_real_home)"
+BASE="${MULTIGRAVITY_HOME:-$REAL_HOME/AntigravityProfiles}"
 cmd="${1-}"
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -179,12 +203,81 @@ case "\$1" in
 esac
 EOF
   chmod +x "$shim"
+}
+
+setup_profile_shell_env() {
+  local profile_path=$1
+  local bin_dir="$profile_path/bin"
 
   # Configure profile login shell environment (for Antigravity shell-env extraction)
   cat << EOF > "$profile_path/.zshenv"
+# multigravity profile zshenv
+export MULTIGRAVITY_PROFILE_PATH="$profile_path"
+export MULTIGRAVITY_REAL_HOME="$REAL_HOME"
+
+# Antigravity background processes resolve state under profile path
 export HOME="$profile_path"
 export ZDOTDIR="$profile_path"
 export PATH="$bin_dir:\$PATH"
+
+# If running in an interactive CLI / terminal session, restore HOME and ZDOTDIR
+# to the user's real home directory so that normal shell configuration, tools, and dotfiles work
+if [[ -o interactive ]] 2>/dev/null || [ -n "\${PS1-}" ]; then
+  export HOME="$REAL_HOME"
+  export ZDOTDIR="$REAL_HOME"
+fi
+
+# Load user's normal .zshenv if available
+if [ -f "$REAL_HOME/.zshenv" ]; then
+  source "$REAL_HOME/.zshenv"
+fi
+EOF
+
+  # Configure .zprofile to source user's normal zprofile
+  cat << EOF > "$profile_path/.zprofile"
+# multigravity profile zprofile
+if [ -f "$REAL_HOME/.zprofile" ]; then
+  source "$REAL_HOME/.zprofile"
+fi
+EOF
+
+  # Configure .zshrc to ensure profile bin is prioritized in PATH and source user's normal zshrc
+  cat << EOF > "$profile_path/.zshrc"
+# multigravity profile zshrc
+export PATH="$bin_dir:\$PATH"
+
+if [ -f "$REAL_HOME/.zshrc" ]; then
+  source "$REAL_HOME/.zshrc"
+fi
+EOF
+
+  # Configure .zlogin to source user's normal zlogin
+  cat << EOF > "$profile_path/.zlogin"
+# multigravity profile zlogin
+if [ -f "$REAL_HOME/.zlogin" ]; then
+  source "$REAL_HOME/.zlogin"
+fi
+EOF
+
+  # Bash compatibility
+  cat << EOF > "$profile_path/.bashrc"
+# multigravity profile bashrc
+export PATH="$bin_dir:\$PATH"
+
+if [ -f "$REAL_HOME/.bashrc" ]; then
+  source "$REAL_HOME/.bashrc"
+fi
+EOF
+
+  cat << EOF > "$profile_path/.bash_profile"
+# multigravity profile bash_profile
+export PATH="$bin_dir:\$PATH"
+
+if [ -f "$REAL_HOME/.bash_profile" ]; then
+  source "$REAL_HOME/.bash_profile"
+elif [ -f "$REAL_HOME/.profile" ]; then
+  source "$REAL_HOME/.profile"
+fi
 EOF
 }
 
@@ -238,10 +331,14 @@ configure_ide_settings() {
     fi
   fi
 
-  # Inject --gemini_dir into Antigravity IDE configuration
-  python3 -c "
-import json, os
-p = '$ide_data_path/User/settings.json'
+  # Inject --gemini_dir and terminal environment into Antigravity IDE configuration
+  python3 - "$ide_data_path/User/settings.json" "$profile_path" "$REAL_HOME" << 'PYEOF' 2>/dev/null || true
+import json, os, sys
+
+p = sys.argv[1]
+profile_path = sys.argv[2]
+real_home = sys.argv[3]
+
 data = {}
 if os.path.exists(p):
     try:
@@ -249,11 +346,23 @@ if os.path.exists(p):
             data = json.load(f)
     except Exception:
         pass
-data['antigravity.serverArgs'] = ['--gemini_dir=$profile_path/.gemini']
+
+data['antigravity.serverArgs'] = [f'--gemini_dir={profile_path}/.gemini']
+
+term_env = data.get('terminal.integrated.env.osx', {})
+if not isinstance(term_env, dict):
+    term_env = {}
+term_env['HOME'] = real_home
+term_env['ZDOTDIR'] = real_home
+data['terminal.integrated.env.osx'] = term_env
+
+if 'terminal.integrated.defaultProfile.osx' not in data:
+    data['terminal.integrated.defaultProfile.osx'] = 'zsh'
+
 os.makedirs(os.path.dirname(p), exist_ok=True)
 with open(p, 'w') as f:
     json.dump(data, f, indent=2)
-" 2>/dev/null || true
+PYEOF
 }
 
 create_profile_layout() {
@@ -267,6 +376,7 @@ create_profile_layout() {
 
   setup_isolated_keychain "$profile_path"
   setup_gemini_symlinks "$profile_path"
+  setup_profile_shell_env "$profile_path"
   configure_ide_settings "$profile_path"
 }
 
@@ -283,6 +393,7 @@ create_shared_layout() {
 
   setup_isolated_keychain "$profile_path"
   setup_gemini_symlinks "$profile_path"
+  setup_profile_shell_env "$profile_path"
   configure_ide_settings "$profile_path"
 
   # Share IDE extensions from system install instead of creating an empty dir
@@ -593,6 +704,8 @@ new_profile() {
       cp -R "$tpl_path" "$profile_path"
       # Ensure .gemini symlinks are up to date even for template-based profiles
       setup_gemini_symlinks "$profile_path"
+      setup_profile_shell_env "$profile_path"
+      configure_ide_settings "$profile_path"
     elif [ "$shared" = true ]; then
       create_shared_layout "$profile_path"
     else
@@ -991,6 +1104,8 @@ import_profile() {
 
   # Ensure .gemini symlinks are fresh after import
   setup_gemini_symlinks "$dest"
+  setup_profile_shell_env "$dest"
+  configure_ide_settings "$dest"
   create_shortcut "$profile"
   print_info "Imported profile '$profile'"
 }

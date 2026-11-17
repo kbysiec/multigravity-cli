@@ -10,6 +10,32 @@ INSTALL_DIR="/usr/local/bin"
 print_step() { echo "  → $1"; }
 abort()      { echo "Error: $1" >&2; exit 1; }
 
+get_real_home() {
+  local user_name
+  user_name="$(id -un 2>/dev/null || echo "${USER:-}")"
+  if [ -n "$user_name" ]; then
+    local expanded
+    expanded="$(eval echo "~$user_name" 2>/dev/null || true)"
+    if [ -n "$expanded" ] && [ "$expanded" != "~$user_name" ] && [ -d "$expanded" ]; then
+      printf '%s\n' "$expanded"
+      return 0
+    fi
+  fi
+
+  if command -v python3 >/dev/null 2>&1; then
+    local py_home
+    py_home="$(python3 -c 'import pwd, os; print(pwd.getpwuid(os.getuid()).pw_dir)' 2>/dev/null || true)"
+    if [ -n "$py_home" ] && [ -d "$py_home" ]; then
+      printf '%s\n' "$py_home"
+      return 0
+    fi
+  fi
+
+  printf '%s\n' "$HOME"
+}
+
+REAL_HOME="$(get_real_home)"
+
 # ── platform check ───────────────────────────────────────────────────────────
 if [ "$(uname -s)" != "Darwin" ]; then
   abort "This version of Multigravity is built exclusively for macOS."
@@ -20,23 +46,23 @@ command -v curl &>/dev/null || abort "curl is required but was not found"
 
 # Fallback to ~/.local/bin if /usr/local/bin is not writable without sudo
 if [ ! -w "$INSTALL_DIR" ]; then
-  INSTALL_DIR="$HOME/.local/bin"
+  INSTALL_DIR="$REAL_HOME/.local/bin"
   mkdir -p "$INSTALL_DIR"
 
   if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
     case "${SHELL:-}" in
-      */zsh)  SHELL_RC="$HOME/.zshrc" ;;
-      */fish) SHELL_RC="$HOME/.config/fish/config.fish" ;;
-      *)      SHELL_RC="$HOME/.bashrc" ;;
+      */zsh)  SHELL_RC="$REAL_HOME/.zshrc" ;;
+      */fish) SHELL_RC="$REAL_HOME/.config/fish/config.fish" ;;
+      *)      SHELL_RC="$REAL_HOME/.bashrc" ;;
     esac
 
     LINE='export PATH="$HOME/.local/bin:$PATH"'
 
-    if [ "$SHELL_RC" = "$HOME/.config/fish/config.fish" ]; then
+    if [ "$SHELL_RC" = "$REAL_HOME/.config/fish/config.fish" ]; then
       LINE='fish_add_path "$HOME/.local/bin"'
     fi
 
-    if ! grep -qF "$HOME/.local/bin" "$SHELL_RC" 2>/dev/null; then
+    if ! grep -qF "$REAL_HOME/.local/bin" "$SHELL_RC" 2>/dev/null && ! grep -qF '$HOME/.local/bin' "$SHELL_RC" 2>/dev/null; then
       echo "" >> "$SHELL_RC"
       echo "# Added by Multigravity installer" >> "$SHELL_RC"
       echo "$LINE" >> "$SHELL_RC"

@@ -5,6 +5,32 @@ set -euo pipefail
 print_step() { echo "  → $1"; }
 abort()      { echo "Error: $1" >&2; exit 1; }
 
+get_real_home() {
+  local user_name
+  user_name="$(id -un 2>/dev/null || echo "${USER:-}")"
+  if [ -n "$user_name" ]; then
+    local expanded
+    expanded="$(eval echo "~$user_name" 2>/dev/null || true)"
+    if [ -n "$expanded" ] && [ "$expanded" != "~$user_name" ] && [ -d "$expanded" ]; then
+      printf '%s\n' "$expanded"
+      return 0
+    fi
+  fi
+
+  if command -v python3 >/dev/null 2>&1; then
+    local py_home
+    py_home="$(python3 -c 'import pwd, os; print(pwd.getpwuid(os.getuid()).pw_dir)' 2>/dev/null || true)"
+    if [ -n "$py_home" ] && [ -d "$py_home" ]; then
+      printf '%s\n' "$py_home"
+      return 0
+    fi
+  fi
+
+  printf '%s\n' "$HOME"
+}
+
+REAL_HOME="$(get_real_home)"
+
 # ── platform check ────────────────────────────────────────────────────────────
 if [ "$(uname -s)" != "Darwin" ]; then
   abort "This uninstaller is built exclusively for macOS."
@@ -16,7 +42,7 @@ echo ""
 REMOVED=0
 
 # ── binary + icon ─────────────────────────────────────────────────────────────
-for dir in "/usr/local/bin" "$HOME/.local/bin"; do
+for dir in "/usr/local/bin" "$REAL_HOME/.local/bin"; do
   if [ -f "$dir/multigravity" ]; then
     print_step "Removing $dir/multigravity"
     rm -f "$dir/multigravity"
@@ -29,14 +55,14 @@ for dir in "/usr/local/bin" "$HOME/.local/bin"; do
 done
 
 # ── desktop / application shortcuts ───────────────────────────────────────────
-for shortcut in "$HOME/Applications"/Multigravity\ *.app; do
+for shortcut in "$REAL_HOME/Applications"/Multigravity\ *.app; do
   [ -d "$shortcut" ] || continue
   print_step "Removing shortcut: $shortcut"
   rm -rf "$shortcut"
 done
 
 # ── profile data (optional) ───────────────────────────────────────────────────
-PROFILE_BASE="${MULTIGRAVITY_HOME:-$HOME/AntigravityProfiles}"
+PROFILE_BASE="${MULTIGRAVITY_HOME:-$REAL_HOME/AntigravityProfiles}"
 if [ -d "$PROFILE_BASE" ]; then
   echo ""
   read -r -p "Delete all profile data in '$PROFILE_BASE'? [y/N] " confirm
